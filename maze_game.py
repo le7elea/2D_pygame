@@ -16,11 +16,9 @@ pygame.display.set_caption("Maze Quiz Game")
 # Colors
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
-RED = (255, 60, 60)
-GREEN = (0, 220, 0)
-BLUE = (80, 150, 255)
-YELLOW = (255, 220, 50)
-GRAY = (50, 50, 50)
+RED = (220, 50, 50)
+GREEN = (0, 200, 0)
+BLUE = (50, 100, 255)
 
 # Load images
 ASSET_PATH = os.path.join(os.path.dirname(__file__), "assets")
@@ -62,7 +60,7 @@ levels = [
     ]
 ]
 
-# Questions per level
+# Questions and answers per level
 questions = [
     {
         "question": "What is the output of: print(2 + 3 * 2)?",
@@ -83,9 +81,7 @@ maze = levels[current_level]
 player_radius = TILE_SIZE // 3
 player_pos = [TILE_SIZE + player_radius, TILE_SIZE + player_radius]
 player_speed = 4
-font_big = pygame.font.SysFont("arial", 36, bold=True)
-font = pygame.font.SysFont("arial", 28, bold=True)
-font_small = pygame.font.SysFont("arial", 22)
+font = pygame.font.SysFont(None, 32)
 
 # Game variables
 lives = 3
@@ -102,7 +98,7 @@ def draw_maze():
             else:
                 screen.blit(floor_img, rect)
 
-# Movement checker
+# Check movement
 def can_move(new_x, new_y):
     points = [
         (new_x - player_radius, new_y - player_radius),
@@ -123,7 +119,7 @@ def can_move(new_x, new_y):
 def reset_player():
     return [TILE_SIZE + player_radius, TILE_SIZE + player_radius]
 
-# Spawn answers randomly
+# Spawn answer words in open tiles
 def spawn_words(level_data, choices):
     open_tiles = [(x, y) for y, row in enumerate(level_data) for x, v in enumerate(row) if v == 0]
     random.shuffle(open_tiles)
@@ -131,7 +127,7 @@ def spawn_words(level_data, choices):
     for i, choice in enumerate(choices):
         if i < len(open_tiles):
             x, y = open_tiles[i]
-            words.append({"text": choice, "pos": (x * TILE_SIZE + 5, y * TILE_SIZE + 5)})
+            words.append({"text": choice, "pos": (x * TILE_SIZE + 10, y * TILE_SIZE + 10)})
     return words
 
 # Main game loop
@@ -144,24 +140,20 @@ while running:
     screen.fill(BLACK)
     draw_maze()
 
-    # Timer
+    # Draw words
+    for word in words:
+        text_surf = font.render(word["text"], True, BLUE)
+        screen.blit(text_surf, word["pos"])
+
+    # Timer logic
     elapsed = (pygame.time.get_ticks() - start_ticks) // 1000
     remaining = max(0, TIMER_LIMIT - elapsed)
 
-    # Question box
-    pygame.draw.rect(screen, GRAY, (10, 5, WIDTH - 20, 60), border_radius=8)
-    screen.blit(font_small.render(questions[current_level]["question"], True, YELLOW), (20, 20))
-
-    # UI
-    screen.blit(font_small.render(f"Lives: {lives}", True, RED), (WIDTH - 150, 15))
-    screen.blit(font_small.render(f"Time: {remaining}", True, WHITE), (WIDTH - 280, 15))
-
-    # Draw answers
-    for word in words:
-        text_surface = font.render(word["text"], True, BLUE)
-        bg_rect = text_surface.get_rect(topleft=word["pos"])
-        pygame.draw.rect(screen, WHITE, bg_rect.inflate(10, 5), border_radius=6)
-        screen.blit(text_surface, word["pos"])
+    # UI elements
+    question_text = questions[current_level]["question"]
+    screen.blit(font.render(question_text, True, WHITE), (20, 10))
+    screen.blit(font.render(f"Lives: {lives}", True, RED), (WIDTH - 150, 10))
+    screen.blit(font.render(f"Time: {remaining}", True, WHITE), (WIDTH - 280, 10))
 
     # Player
     player_rect = player_img.get_rect(center=(int(player_pos[0]), int(player_pos[1])))
@@ -189,9 +181,10 @@ while running:
     # Word collision check
     player_rect = pygame.Rect(player_pos[0]-15, player_pos[1]-15, 30, 30)
     for word in words[:]:
-        text_rect = pygame.Rect(word["pos"][0], word["pos"][1], 80, 40)
+        text_rect = pygame.Rect(word["pos"][0], word["pos"][1], 60, 30)
         if player_rect.colliderect(text_rect):
             if word["text"] == questions[current_level]["correct"]:
+                # Correct answer → next level
                 current_level += 1
                 if current_level < len(levels):
                     maze = levels[current_level]
@@ -200,30 +193,34 @@ while running:
                     words = spawn_words(maze, questions[current_level]["choices"])
                 else:
                     final_win = True
-                    running = False
+                    running = False  # Stop main loop if all levels are completed
                 break
             else:
+                # Wrong answer → lose life
                 lives -= 1
                 words.remove(word)
                 if lives <= 0:
                     running = False
 
-    # Time out = Game over
+    # If time runs out → instant game over
     if remaining <= 0 and not final_win:
         running = False
 
     pygame.display.flip()
     clock.tick(30)
 
-# --- End screen ---
+# --- Final screen ---
 screen.fill(BLACK)
-if final_win:
-    msg = font_big.render("🎉 You finished all coding challenges! 🏆", True, GREEN)
-else:
-    msg = font_big.render("💀 Time’s Up or Out of Lives! Game Over!", True, RED)
 
-msg_rect = msg.get_rect(center=(WIDTH // 2, HEIGHT // 2))
-screen.blit(msg, msg_rect)
+if final_win:
+    # 🏆 Win screen
+    win_text = font.render("🎉 You finished all coding challenges! 🏆", True, GREEN)
+    screen.blit(win_text, (120, HEIGHT // 2))
+else:
+    # 💀 Game over screen
+    over_text = font.render("⏰ Time Over or Out of Lives! Game Over!", True, RED)
+    screen.blit(over_text, (120, HEIGHT // 2))
+
 pygame.display.flip()
-pygame.time.wait(3500)
+pygame.time.wait(3000)
 pygame.quit()
