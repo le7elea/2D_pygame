@@ -38,15 +38,38 @@ total_coins = 0
 # --- Quiz configuration ---
 QUIZ_LEVELS = {3, 5, 7, 9, 13, 16, 19, 20}  # set of levels that trigger a quiz
 quiz_questions = [
-    {"question": "What is the output of print(2 ** 3)?", "choices": ["5", "6", "8", "9"], "answer": 2},
-    {"question": "Which data type is immutable?", "choices": ["List", "Dictionary", "Set", "Tuple"], "answer": 3},
-    {"question": "What keyword defines a function in Python?", "choices": ["func", "def", "lambda", "function"], "answer": 1},
-    {"question": "Which symbol starts a comment in Python?", "choices": ["//", "#", "/* */", "--"], "answer": 1},
-    {"question": "Index of first element in a Python list?", "choices": ["0", "1", "-1", "None"], "answer": 0},
-    {"question": "Which language is used with Pygame?", "choices": ["C++", "Python", "Java", "Kotlin"], "answer": 1},
-    {"question": "CPU stands for?", "choices": ["Central Print Unit", "Computer Power Unit", "Central Processing Unit", "Control Panel Unit"], "answer": 2},
-    {"question": "What color do red and blue make?", "choices": ["Green", "Purple", "Orange", "Yellow"], "answer": 1},
+    {"question": "What is the main purpose of Pygame?", 
+     "choices": ["Web development", "Game development", "Database management", "Data analysis"], 
+     "answer": 1},
+    {"question": "Which function initializes all Pygame modules?", 
+     "choices": ["pygame.start()", "pygame.init()", "pygame.run()", "pygame.load()"], 
+     "answer": 1},
+    {"question": "Which Pygame method is used to create the game window?", 
+     "choices": ["pygame.display.set_mode()", "pygame.window()", "pygame.screen()", "pygame.create_window()"], 
+     "answer": 0},
+    {"question": "Which Pygame module handles sounds?", 
+     "choices": ["pygame.display", "pygame.mixer", "pygame.sprite", "pygame.event"], 
+     "answer": 1},
+    {"question": "How do you detect key presses in Pygame?", 
+     "choices": ["pygame.key.get_pressed()", "pygame.mouse.get_pos()", "pygame.event.detect()", "pygame.key.down()"], 
+     "answer": 0},
+    {"question": "Which method updates the full display in Pygame?", 
+     "choices": ["pygame.flip()", "pygame.update()", "pygame.draw()", "pygame.refresh()"], 
+     "answer": 0},
+    {"question": "Which object is used to manage game framerate in Pygame?", 
+     "choices": ["pygame.Clock()", "pygame.Timer()", "pygame.FPS()", "pygame.Loop()"], 
+     "answer": 0},
+    {"question": "What is the purpose of pygame.Surface?", 
+     "choices": ["Store images and graphics", "Handle sound playback", "Manage input events", "Control game clock"], 
+     "answer": 0},
+    {"question": "Which Pygame method draws a rectangle?", 
+     "choices": ["pygame.draw.rect()", "pygame.rect.draw()", "pygame.make.rect()", "pygame.rect()"], 
+     "answer": 0},
+    {"question": "How do you play a sound in Pygame?", 
+     "choices": ["sound.play()", "pygame.sound()", "pygame.mixer.play()", "sound.start()"], 
+     "answer": 0},
 ]
+
 
 # --- Load Sprites ---
 def load_sprite(name, size):
@@ -236,16 +259,15 @@ def load_highscore():
             return 1
     return 1
 
-# --- Game Level ---
 def play_level(level, lives):
     global total_coins
     clock = pygame.time.Clock()
     tile_size = max(20, TILE_SIZE - (level - 1) * 3)
     rows, cols = GAME_HEIGHT // tile_size, WIDTH // tile_size
 
+    # --- Background & Sprites ---
     background = pygame.image.load(f"assets/level{(level - 1) % 4 + 5}.png").convert()
     background = pygame.transform.scale(background, (WIDTH, HEIGHT))
-    player_img = load_sprite("nailonggg.png", tile_size)
     player_walk_frames = load_walk_sprites("wa.png", 4, tile_size)
     player_frame_index = 0
     player_last_update = pygame.time.get_ticks()
@@ -254,38 +276,62 @@ def play_level(level, lives):
 
     coin_img = load_sprite("coinss.png", tile_size)
     exit_img = load_sprite("goal.png", tile_size)
+    exit_img = pygame.transform.scale(exit_img, (int(tile_size * 1.0), int(tile_size * 1.0)))
     enemy_img = load_sprite("enemy.png", tile_size)
     item_img = load_sprite("key.png", tile_size)
 
     coin_sound = pygame.mixer.Sound("assets/coin.mp3")
     bump_sound = pygame.mixer.Sound("assets/bump.mp3")
+    item_sound = pygame.mixer.Sound("assets/item.mp3") 
 
+    # --- Maze ---
     maze = generate_maze(rows, cols)
     player_pos = [1, 1]
     exit_pos = [cols - 3, rows - 3]
     maze[exit_pos[1]][exit_pos[0]] = 0
 
+    # --- Enemies ---
     enemies = []
     for _ in range(min(level + 1, 6)):
         ex, ey = random.randint(3, cols - 3), random.randint(3, rows - 3)
         if maze[ey][ex] == 0:
             enemies.append([ex, ey])
 
+    # --- Coins ---
     coins = random.sample([(x, y) for y in range(rows) for x in range(cols) if maze[y][x] == 0],
                           min(level + 3, 20))
+
+    # --- Items & Tips ---
     collectible_count = min(3 + level, 8)
     required_items = random.sample([(x, y) for y in range(rows) for x in range(cols) if maze[y][x] == 0],
                                    collectible_count)
+    item_tips = [
+    "Tip: Pygame is used for game development.",
+    "Tip: Initialize Pygame with pygame.init().",
+    "Tip: Create a window using pygame.display.set_mode().",
+    "Tip: Play sounds using pygame.mixer module.",
+    "Tip: Detect key presses with pygame.key.get_pressed().",
+    "Tip: Update the display with pygame.display.flip().",
+    "Tip: Control framerate using pygame.Clock().",
+    "Tip: pygame.Surface stores images and graphics.",
+    "Tip: Draw rectangles with pygame.draw.rect().",
+    "Tip: Play a sound with sound.play()."
+    ]
     collected_items = 0
 
-    enemy_timer = 0
-    running = True
+    # --- Tip queue system ---
+    tips_to_show = []
+    tip_index = 0
+    tip_display_time = 0
+    tip_duration = 2000  # 2 seconds per tip
 
+    enemy_timer = 0
     start_ticks = pygame.time.get_ticks()
     time_limit = 60
 
     player_speed = 10
     enemy_speed = max(3, 12 - level)
+    running = True
 
     while running:
         seconds_passed = (pygame.time.get_ticks() - start_ticks) / 1000
@@ -300,17 +346,18 @@ def play_level(level, lives):
                 return False, lives
 
         screen.blit(background, (0, 0))
+
+        # --- HUD Background ---
         for i in range(HUD_HEIGHT):
             color_value = 40 + int((i / HUD_HEIGHT) * 40)
             pygame.draw.line(screen, (color_value, color_value, color_value + 20), (0, i), (WIDTH, i))
         pygame.draw.line(screen, LIGHT_BLUE, (0, HUD_HEIGHT - 2), (WIDTH, HUD_HEIGHT - 2), 3)
 
-        # HUD
+        # --- HUD Info ---
         screen.blit(font.render(f"🏁 Level: {level}", True, LIGHT_BLUE), (20, 20))
         screen.blit(font.render(f"❤️ Lives: {lives}", True, RED), (280, 20))
         screen.blit(font.render(f"💰 Coins: {total_coins}", True, YELLOW), (520, 20))
         screen.blit(font.render(f"🔑 Items: {collected_items}/{collectible_count}", True, GREEN), (670, 20))
-
         if level >= 5:
             timer_text = font.render(f"⏱ {time_left}s", True, (255, 255, 255) if time_left > 10 else RED)
             screen.blit(timer_text, (WIDTH - 140, HUD_HEIGHT + 10))
@@ -324,6 +371,7 @@ def play_level(level, lives):
         for e in enemies:
             screen.blit(enemy_img, (e[0]*tile_size, e[1]*tile_size + HUD_HEIGHT))
 
+        # --- Player Input ---
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit(); sys.exit()
@@ -344,6 +392,7 @@ def play_level(level, lives):
         else:
             bump_sound.play()
 
+        # --- Animate Player ---
         moving = any([keys[pygame.K_UP], keys[pygame.K_DOWN], keys[pygame.K_LEFT], keys[pygame.K_RIGHT]])
         if moving:
             now = pygame.time.get_ticks()
@@ -353,18 +402,49 @@ def play_level(level, lives):
         current_player_img = player_walk_frames[player_frame_index] if moving else player_walk_frames[0]
         screen.blit(current_player_img, (player_pos[0]*tile_size, player_pos[1]*tile_size + HUD_HEIGHT))
 
+        # --- Coins ---
         for c in coins[:]:
             if player_pos == list(c):
                 coins.remove(c)
                 total_coins += 1
                 coin_sound.play()
 
-        for item in required_items[:]:
+        # --- Items & Tips (queue multiple tips) ---
+        for idx, item in enumerate(required_items[:]):
             if player_pos == list(item):
                 required_items.remove(item)
                 collected_items += 1
-                coin_sound.play()
+                item_sound.play()
+                # Pick 2–3 random tips
+                tip_count = random.randint(2, 3)
+                new_tips = random.sample(item_tips, tip_count)
+                tips_to_show.extend(new_tips)
+                tip_index = 0
+                tip_display_time = pygame.time.get_ticks()
 
+        # --- Draw queued tips with fade ---
+        if tips_to_show:
+            current_tip = tips_to_show[tip_index]
+            elapsed = pygame.time.get_ticks() - tip_display_time
+            if elapsed > tip_duration:
+                tip_index += 1
+                tip_display_time = pygame.time.get_ticks()
+                if tip_index >= len(tips_to_show):
+                    tips_to_show = []
+                    tip_index = 0
+                    current_tip = ""
+            if current_tip:
+                tip_font = pygame.font.SysFont("arial", 22, bold=True)
+                tip_surf = tip_font.render(current_tip, True, LIGHT_BLUE)
+                tip_bg = pygame.Surface((tip_surf.get_width()+20, tip_surf.get_height()+10))
+                tip_bg.fill(DARK)
+                tip_bg.set_alpha(180)
+                tip_x = WIDTH//2 - tip_surf.get_width()//2 - 10
+                tip_y = HEIGHT - 50
+                screen.blit(tip_bg, (tip_x, tip_y))
+                screen.blit(tip_surf, (WIDTH//2 - tip_surf.get_width()//2, tip_y + 5))
+
+        # --- Enemy Collision ---
         for e in enemies:
             if player_pos == e:
                 lives -= 1
@@ -374,6 +454,7 @@ def play_level(level, lives):
                 else:
                     player_pos = [1, 1]
 
+        # --- Exit Condition ---
         if player_pos == list(exit_pos):
             if collected_items < collectible_count:
                 msg = font.render(f"Collect all {collectible_count - collected_items} items first!", True, RED)
@@ -385,6 +466,7 @@ def play_level(level, lives):
                 level_complete(level)
                 return True, lives
 
+        # --- Move Enemies ---
         enemy_timer += 1
         if enemy_timer >= enemy_speed:
             enemy_timer = 0
@@ -396,6 +478,7 @@ def play_level(level, lives):
 
         pygame.display.flip()
         clock.tick(player_speed)
+
 
 # --- Screens ---
 def level_complete(level):
@@ -456,16 +539,85 @@ def start_menu():
 
         pygame.display.flip()
 
+def npc_intro_all_tips():
+    clock = pygame.time.Clock()
+    npc_img = load_sprite("npc.png", 150)  # NPC size
+    tips = [
+        "Hi there, adventurer!",
+        "Welcome to MASID: Maze Adventure!",
+        "Collect all items to proceed to the next level.",
+        "Collecting items gives you hints for quizzes.",
+        "Avoid enemies — they cost lives.",
+        "Some levels are timed — hurry!",
+        "Use arrow keys to move.",
+        "Answer quizzes correctly to keep lives.",
+        "Press ESC to pause the game anytime.",
+        "Goodluck and have fun exploring the maze!",
+    ]
+
+    # Dialogue bubble settings
+    bubble_width, bubble_height = 500, 100
+    bubble_x, bubble_y = 200, HEIGHT//2 - bubble_height//2
+    font_small = pygame.font.SysFont("arial", 24)
+    
+    current_tip = 0
+    total_tips = len(tips)
+
+    # Optional background image for the dialogue screen
+    try:
+        bg = pygame.image.load("assets/backk.png").convert()
+        bg = pygame.transform.scale(bg, (WIDTH, HEIGHT))
+    except:
+        bg = None  # fallback to DARK background if image not found
+
+    while current_tip < total_tips:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit(); sys.exit()
+            if event.type == pygame.KEYDOWN or event.type == pygame.MOUSEBUTTONDOWN:
+                # Move to next tip when player presses any key or clicks
+                current_tip += 1
+
+        # Draw background
+        if bg:
+            screen.blit(bg, (0, 0))
+        else:
+            screen.fill(DARK)
+
+        # Draw NPC character
+        screen.blit(npc_img, (50, HEIGHT//2 - npc_img.get_height()//2))
+
+        if current_tip < total_tips:
+            # Draw bubble
+            pygame.draw.rect(screen, (255, 255, 255), (bubble_x, bubble_y, bubble_width, bubble_height), border_radius=16)
+            pygame.draw.rect(screen, LIGHT_BLUE, (bubble_x, bubble_y, bubble_width, bubble_height), 3, border_radius=16)
+
+            # Draw “tail” pointing to NPC
+            tail_points = [(bubble_x - 10, bubble_y + 20), (bubble_x, bubble_y + 40), (bubble_x, bubble_y + 20)]
+            pygame.draw.polygon(screen, (255, 255, 255), tail_points)
+            pygame.draw.polygon(screen, LIGHT_BLUE, tail_points, 2)
+
+            # Draw tip text
+            tip_text = font_small.render(tips[current_tip], True, BLACK)
+            screen.blit(tip_text, (bubble_x + 20, bubble_y + bubble_height//2 - tip_text.get_height()//2))
+
+        pygame.display.flip()
+        clock.tick(30)
 
 
-# --- Main Loop ---
 def main():
     pygame.mixer.music.load("assets/background music.wav")
     pygame.mixer.music.play(-1)
     pygame.mixer.music.set_volume(0.5)
+
     start_menu()
+
+    # Show all tips at the start
+    npc_intro_all_tips()
+
     level, lives = 1, 3
     while True:
+        # quiz & level logic remains the same
         if level in QUIZ_LEVELS:
             while True:
                 lives, passed = quiz_screen(level, lives)
@@ -479,12 +631,15 @@ def main():
             if lives <= 0:
                 continue
 
+        # Start level
         next_level, lives = play_level(level, lives)
         if next_level:
             level += 1
         else:
             start_menu()
             level, lives = 1, 3
+
+
 
 if __name__ == "__main__":
     main()
