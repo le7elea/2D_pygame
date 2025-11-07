@@ -292,6 +292,7 @@ def npc_intro_level1():
         "Press A/S/W/D to shoot projectiles at enemies.",
         "Keep your mind sharp for Pygame tips that help with quizzes.",
         "Quizzes appear every 2 levels starting from level 2!",
+        "Timer starts from Level 5 - be quick!",
         "Good luck! This is the real Level 1 maze ahead!"
     ]
 
@@ -833,23 +834,17 @@ def play_level(level, lives):
     tip_display_time = 0
     tip_duration = 2000  # 2 seconds per tip
 
-    # --- Timer notification ---
-    timer_notification_time = 0
-    timer_notification_duration = 2000  # Show for 2 seconds
-    show_timer_notification = False
-
     enemy_timer = 0
     start_ticks = pygame.time.get_ticks()
     time_limit = 120
 
-    # Show timer notification for levels with timer
-    if level >= 5:
-        show_timer_notification = True
-        timer_notification_time = pygame.time.get_ticks()
-
     player_speed = 10
     enemy_speed = max(3, 12 - level)
     running = True
+    
+    # Timer notification variables
+    timer_notification_time = 0
+    show_timer_notification = level >= 5
 
     while running:
         seconds_passed = (pygame.time.get_ticks() - start_ticks) / 1000
@@ -877,8 +872,12 @@ def play_level(level, lives):
         screen.blit(font.render(f"💰 Coins: {total_coins}", True, YELLOW), (520, 20))
         screen.blit(font.render(f"🔑 Items: {collected_items}/{collectible_count}", True, GREEN), (670, 20))
         if level >= 5:
-            timer_text = font.render(f"⏱ {time_left}s", True, (255, 255, 255) if time_left > 10 else RED)
+            timer_text = font.render(f"⏱ {time_left}s", True, (255, 255, 255) if time_left > 30 else YELLOW if time_left > 10 else RED)
             screen.blit(timer_text, (WIDTH - 140, HUD_HEIGHT + 10))
+        else:
+            # Show timer status for levels below 5
+            timer_status = font.render("⏱ Timer: Level 5+", True, LIGHT_BLUE)
+            screen.blit(timer_status, (WIDTH - 180, HUD_HEIGHT + 10))
 
         draw_maze(maze, tile_size)
         screen.blit(exit_img, (exit_pos[0]*tile_size, exit_pos[1]*tile_size + HUD_HEIGHT))
@@ -889,32 +888,15 @@ def play_level(level, lives):
         for e in enemies:
             screen.blit(enemy_img, (e[0]*tile_size, e[1]*tile_size + HUD_HEIGHT))
 
-        # --- Timer Starting Notification ---
-        if show_timer_notification:
-            elapsed_notification = pygame.time.get_ticks() - timer_notification_time
-            if elapsed_notification < timer_notification_duration:
-                # Create a semi-transparent overlay
-                notification_bg = pygame.Surface((400, 80), pygame.SRCALPHA)
-                notification_bg.fill((0, 0, 0, 180))
-                
-                # Draw notification box
-                notification_rect = pygame.Rect(WIDTH//2 - 200, HEIGHT//2 - 40, 400, 80)
-                pygame.draw.rect(screen, (30, 30, 60), notification_rect, border_radius=12)
-                pygame.draw.rect(screen, LIGHT_BLUE, notification_rect, 3, border_radius=12)
-                
-                # Notification text
-                notification_font = pygame.font.SysFont("arial", 32, bold=True)
-                notification_text = notification_font.render("⏰ TIME STARTING!", True, YELLOW)
-                screen.blit(notification_text, (WIDTH//2 - notification_text.get_width()//2, HEIGHT//2 - 20))
-                
-                # Countdown text (optional)
-                countdown_font = pygame.font.SysFont("arial", 18)
-                countdown_seconds = 3 - (elapsed_notification // 1000)
-                if countdown_seconds > 0:
-                    countdown_text = countdown_font.render(f"Timer begins in {countdown_seconds}...", True, LIGHT_BLUE)
-                    screen.blit(countdown_text, (WIDTH//2 - countdown_text.get_width()//2, HEIGHT//2 + 20))
-            else:
-                show_timer_notification = False
+        # --- Show timer notification for first few seconds ---
+        if show_timer_notification and seconds_passed < 3:
+            notification_alpha = 200 - (seconds_passed / 3.0) * 150  # Fade out
+            notification_bg = pygame.Surface((400, 60), pygame.SRCALPHA)
+            notification_bg.fill((0, 0, 0, int(notification_alpha)))
+            screen.blit(notification_bg, (WIDTH//2 - 200, HEIGHT//2 - 30))
+            
+            notification_text = font.render("⏰ TIMER STARTED! Be quick!", True, YELLOW)
+            screen.blit(notification_text, (WIDTH//2 - notification_text.get_width()//2, HEIGHT//2 - 10))
 
         # --- Player Input ---
         for event in pygame.event.get():
