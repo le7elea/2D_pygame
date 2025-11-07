@@ -9,7 +9,7 @@ pygame.init()
 pygame.mixer.init()
 
 # --- Screen setup ---
-WIDTH, HEIGHT = 800, 640
+WIDTH, HEIGHT = 1000, 700
 HUD_HEIGHT = 80
 GAME_HEIGHT = HEIGHT - HUD_HEIGHT
 TILE_SIZE = 40
@@ -25,18 +25,34 @@ GREEN = (0, 200, 0)
 BLUE = (0, 120, 255)
 LIGHT_BLUE = (100, 180, 255)
 DARK = (30, 30, 40)
+PURPLE = (150, 60, 200)
+GRAY = (100, 100, 100)
 
 # --- Font ---
 font = pygame.font.SysFont("arial", 28)
+title_font = pygame.font.SysFont("arial", 48, bold=True)
 
 # --- Directions ---
 DIRS = [(0, -1), (1, 0), (0, 1), (-1, 0)]
 
-# --- Global variable for total coins ---
+# --- Global variables ---
 total_coins = 0
+current_map = 1  # Default map
+# Track completed levels for each map: {map_number: [completed_levels]}
+level_completion = {1: [False]*5, 2: [False]*5, 3: [False]*5, 4: [False]*5}
+# Track which maps are unlocked
+map_unlocked = {1: True, 2: False, 3: False, 4: False}
+
+# --- Maps Configuration ---
+MAPS = {
+    1: {"theme": "Enchanted Groove Maze", "color": GREEN, "image": "map1.png"},
+    2: {"theme": "Pharaoh's Sunstone Maze", "color": YELLOW, "image": "map2.png"},
+    3: {"theme": "Frostfire Labyrinth", "color": LIGHT_BLUE, "image": "map3.png"},
+    4: {"theme": "Crimson Caldera Maze", "color": RED, "image": "map4.png"}
+}
 
 # --- Quiz configuration ---
-QUIZ_LEVELS = {3, 5, 7, 9, 13, 16, 19, 20}  # set of levels that trigger a quiz
+QUIZ_LEVELS = {3, 5, 7, 9, 13, 16, 19, 20}
 quiz_questions = [
     {"question": "What is the main purpose of Pygame?", 
      "choices": ["Web development", "Game development", "Database management", "Data analysis"], 
@@ -70,7 +86,6 @@ quiz_questions = [
      "answer": 0},
 ]
 
-
 # --- Load Sprites ---
 def load_sprite(name, size):
     try:
@@ -79,6 +94,53 @@ def load_sprite(name, size):
     except:
         surf = pygame.Surface((size, size))
         surf.fill((100, 100, 100))
+        return surf
+
+# --- Load Map Preview Images ---
+def load_map_preview(map_num):
+    """Load map preview image with fallback to colored surface"""
+    map_info = MAPS[map_num]
+    try:
+        img = pygame.image.load(f"assets/{map_info['image']}").convert()
+        # Scale to fit our button size (160x160)
+        img = pygame.transform.scale(img, (160, 160))
+        return img
+    except:
+        # Fallback: create a colored surface with theme text
+        surf = pygame.Surface((160, 160))
+        surf.fill(map_info["color"])
+        # Add theme text
+        font_small = pygame.font.SysFont("arial", 18, bold=True)
+        theme_text = font_small.render(map_info["theme"].upper(), True, WHITE)
+        surf.blit(theme_text, (80 - theme_text.get_width()//2, 80 - theme_text.get_height()//2))
+        return surf
+
+# --- Load Background ---
+def load_background(name):
+    """Load background image with fallback to dark surface"""
+    try:
+        bg = pygame.image.load(f"assets/{name}").convert()
+        return pygame.transform.scale(bg, (WIDTH, HEIGHT))
+    except:
+        surf = pygame.Surface((WIDTH, HEIGHT))
+        surf.fill(DARK)
+        return surf
+
+# --- Load Map Background ---
+def load_map_background(map_num):
+    """Load map-specific background image"""
+    map_info = MAPS[map_num]
+    try:
+        bg = pygame.image.load(f"assets/{map_info['image']}").convert()
+        return pygame.transform.scale(bg, (WIDTH, HEIGHT))
+    except:
+        # Fallback: create a colored surface
+        surf = pygame.Surface((WIDTH, HEIGHT))
+        surf.fill(map_info["color"])
+        # Add theme text in the center
+        theme_font = pygame.font.SysFont("arial", 36, bold=True)
+        theme_text = theme_font.render(map_info["theme"], True, WHITE)
+        surf.blit(theme_text, (WIDTH//2 - theme_text.get_width()//2, HEIGHT//2 - theme_text.get_height()//2))
         return surf
 
 # --- Load walking animation frames ---
@@ -93,7 +155,6 @@ def load_walk_sprites(sheet_name, frame_count, size):
             frames.append(pygame.transform.scale(frame, (size, size)))
         return frames
     except:
-        # fallback single frame if sheet missing
         return [pygame.Surface((size, size))]
 
 # --- Maze Generation ---
@@ -238,36 +299,58 @@ def quiz_screen(level, lives):
 
         clock.tick(30)
 
-# --- Save/Load Highscore ---
-def save_highscore(level):
+# --- Save/Load Progress ---
+def save_progress():
     try:
-        with open("highscore.txt", "r") as f:
-            current = int(f.read())
-        if level > current:
-            with open("highscore.txt", "w") as f:
-                f.write(str(level))
+        with open("progress.txt", "w") as f:
+            # Save level completion status for each map
+            for map_num, levels in level_completion.items():
+                level_str = ",".join(["1" if completed else "0" for completed in levels])
+                f.write(f"{map_num}:{level_str}\n")
+            # Save map unlocked status
+            unlocked_str = ",".join(["1" if unlocked else "0" for unlocked in map_unlocked.values()])
+            f.write(f"unlocked:{unlocked_str}\n")
     except:
-        with open("highscore.txt", "w") as f:
-            f.write(str(level))
+        pass
 
-def load_highscore():
-    if os.path.exists("highscore.txt"):
+def load_progress():
+    global level_completion, map_unlocked
+    if os.path.exists("progress.txt"):
         try:
-            with open("highscore.txt", "r") as f:
-                return int(f.read())
+            with open("progress.txt", "r") as f:
+                for line in f:
+                    parts = line.strip().split(":")
+                    if len(parts) == 2:
+                        if parts[0] == "unlocked":
+                            # Load map unlocked status
+                            unlocked_list = parts[1].split(",")
+                            for i, unlocked in enumerate(unlocked_list):
+                                if i+1 in map_unlocked:
+                                    map_unlocked[i+1] = (unlocked == "1")
+                        else:
+                            # Load level completion status
+                            map_num = int(parts[0])
+                            level_list = parts[1].split(",")
+                            for i, completed in enumerate(level_list):
+                                if i < len(level_completion[map_num]):
+                                    level_completion[map_num][i] = (completed == "1")
         except:
-            return 1
-    return 1
+            pass
 
-def play_level(level, lives):
+def play_level(level, lives, map_num):
     global total_coins
     clock = pygame.time.Clock()
     tile_size = max(20, TILE_SIZE - (level - 1) * 3)
     rows, cols = GAME_HEIGHT // tile_size, WIDTH // tile_size
 
     # --- Background & Sprites ---
-    background = pygame.image.load(f"assets/level{(level - 1) % 4 + 5}.png").convert()
-    background = pygame.transform.scale(background, (WIDTH, HEIGHT))
+    try:
+        background = pygame.image.load(f"assets/level{(level - 1) % 4 + 5}.png").convert()
+        background = pygame.transform.scale(background, (WIDTH, HEIGHT))
+    except:
+        background = pygame.Surface((WIDTH, HEIGHT))
+        background.fill(DARK)
+    
     player_walk_frames = load_walk_sprites("wa.png", 4, tile_size)
     player_frame_index = 0
     player_last_update = pygame.time.get_ticks()
@@ -276,7 +359,7 @@ def play_level(level, lives):
 
     coin_img = load_sprite("coinss.png", tile_size)
     exit_img = load_sprite("goal.png", tile_size)
-    exit_img = pygame.transform.scale(exit_img, (int(tile_size * 1.0), int(tile_size * 1.0)))
+    exit_img = pygame.transform.scale(exit_img, (int(tile_size * 2.5), int(tile_size * 2.5)))
     enemy_img = load_sprite("enemy.png", tile_size)
     item_img = load_sprite("key.png", tile_size)
 
@@ -290,9 +373,14 @@ def play_level(level, lives):
     exit_pos = [cols - 3, rows - 3]
     maze[exit_pos[1]][exit_pos[0]] = 0
 
-    # --- Enemies ---
+    # --- Enemies (scale with level) ---
     enemies = []
-    for _ in range(min(level + 1, 6)):
+    # Start with 2 enemies at level 1, increase with level
+    base_enemies = 2
+    enemy_count = base_enemies + (level // 2)  # Add 1 enemy every 2 levels
+    enemy_count = min(enemy_count, 10)  # Cap at 10 enemies
+    
+    for _ in range(enemy_count):
         ex, ey = random.randint(3, cols - 3), random.randint(3, rows - 3)
         if maze[ey][ex] == 0:
             enemies.append([ex, ey])
@@ -301,8 +389,12 @@ def play_level(level, lives):
     coins = random.sample([(x, y) for y in range(rows) for x in range(cols) if maze[y][x] == 0],
                           min(level + 3, 20))
 
-    # --- Items & Tips ---
-    collectible_count = min(3 + level, 8)
+    # --- Items (scale with level) ---
+    # Start with 3 items at level 1, increase with level
+    base_items = 3
+    collectible_count = base_items + (level // 2)  # Add 1 item every 2 levels
+    collectible_count = min(collectible_count, 10)  # Cap at 10 items
+    
     required_items = random.sample([(x, y) for y in range(rows) for x in range(cols) if maze[y][x] == 0],
                                    collectible_count)
     item_tips = [
@@ -323,11 +415,11 @@ def play_level(level, lives):
     tips_to_show = []
     tip_index = 0
     tip_display_time = 0
-    tip_duration = 2000  # 2 seconds per tip
+    tip_duration = 3000
 
     enemy_timer = 0
     start_ticks = pygame.time.get_ticks()
-    time_limit = 60
+    time_limit = 90
 
     player_speed = 10
     enemy_speed = max(3, 12 - level)
@@ -358,6 +450,8 @@ def play_level(level, lives):
         screen.blit(font.render(f"❤️ Lives: {lives}", True, RED), (280, 20))
         screen.blit(font.render(f"💰 Coins: {total_coins}", True, YELLOW), (520, 20))
         screen.blit(font.render(f"🔑 Items: {collected_items}/{collectible_count}", True, GREEN), (670, 20))
+        screen.blit(font.render(f"🗺️ Map: {map_num}", True, PURPLE), (WIDTH - 300, 20))
+        
         if level >= 5:
             timer_text = font.render(f"⏱ {time_left}s", True, (255, 255, 255) if time_left > 10 else RED)
             screen.blit(timer_text, (WIDTH - 140, HUD_HEIGHT + 10))
@@ -409,20 +503,19 @@ def play_level(level, lives):
                 total_coins += 1
                 coin_sound.play()
 
-        # --- Items & Tips (queue multiple tips) ---
+        # --- Items & Tips ---
         for idx, item in enumerate(required_items[:]):
             if player_pos == list(item):
                 required_items.remove(item)
                 collected_items += 1
                 item_sound.play()
-                # Pick 2–3 random tips
                 tip_count = random.randint(2, 3)
                 new_tips = random.sample(item_tips, tip_count)
                 tips_to_show.extend(new_tips)
                 tip_index = 0
                 tip_display_time = pygame.time.get_ticks()
 
-        # --- Draw queued tips with fade ---
+        # --- Draw queued tips ---
         if tips_to_show:
             current_tip = tips_to_show[tip_index]
             elapsed = pygame.time.get_ticks() - tip_display_time
@@ -462,7 +555,6 @@ def play_level(level, lives):
                 pygame.display.flip()
                 pygame.time.delay(1000)
             else:
-                save_highscore(level)
                 level_complete(level)
                 return True, lives
 
@@ -479,14 +571,34 @@ def play_level(level, lives):
         pygame.display.flip()
         clock.tick(player_speed)
 
-
 # --- Screens ---
 def level_complete(level):
     screen.fill(BLACK)
-    msg = font.render(f"Level {level} Complete!", True, GREEN)
-    screen.blit(msg, (WIDTH//2 - msg.get_width()//2, HEIGHT//2))
-    pygame.display.flip()
-    pygame.time.delay(1500)
+    title_font = pygame.font.Font(None, 80)
+    sub_font = pygame.font.Font(None, 40)
+    
+    title_text = title_font.render(f"LEVEL {level} COMPLETE!", True, (0, 255, 100))
+    sub_text = sub_font.render("Get ready for the next challenge...", True, (200, 200, 200))
+    
+    for alpha in range(0, 255, 5):
+        screen.fill(BLACK)
+        title_surface = title_text.copy()
+        sub_surface = sub_text.copy()
+        title_surface.set_alpha(alpha)
+        sub_surface.set_alpha(alpha)
+        
+        screen.blit(title_surface, (WIDTH//2 - title_surface.get_width()//2, HEIGHT//2 - 60))
+        screen.blit(sub_surface, (WIDTH//2 - sub_surface.get_width()//2, HEIGHT//2 + 20))
+        try:
+            complete_sound = pygame.mixer.Sound("assets/nextlevel.mp3")
+            complete_sound.play()
+        except:
+            pass
+
+        pygame.display.flip()
+        pygame.time.delay(20)
+    
+    pygame.time.delay(1200)
 
 def game_over():
     screen.fill(BLACK)
@@ -495,18 +607,12 @@ def game_over():
     pygame.display.flip()
     pygame.time.delay(2000)
 
-# --- Start Menu (show highest level automatically) ---
-def start_menu():
-    bg = pygame.image.load("assets/startback.png").convert()
-    bg = pygame.transform.scale(bg, (WIDTH, HEIGHT))
+# --- Start Screen ---
+def start_screen():
+    bg = load_background("startback.png")
     button_w, button_h = 220, 50
     start_btn = pygame.Rect(WIDTH//2 - button_w//2, HEIGHT//2 - 30, button_w, button_h)
     quit_btn = pygame.Rect(WIDTH//2 - button_w//2, HEIGHT//2 + 50, button_w, button_h)
-
-    high_level = load_highscore()  # read highest level
-
-    # Create a bold font slightly bigger for the high score
-    high_font = pygame.font.SysFont("arial", 28, bold=True)
 
     while True:
         screen.blit(bg, (0, 0))
@@ -521,13 +627,7 @@ def start_menu():
             label = font.render(text, True, WHITE)
             screen.blit(label, (rect.centerx - label.get_width()//2, rect.centery - label.get_height()//2))
 
-        # Display highest level reached below quit button with style
-        high_text = high_font.render(f"🏆 Highest Level Reached: {high_level}", True, YELLOW)
-        # Shadow effect
-        shadow = high_font.render(f"🏆 Highest Level Reached: {high_level}", True, (150, 120, 0))
-        screen.blit(shadow, (WIDTH//2 - shadow.get_width()//2 + 2, quit_btn.bottom + 22))
-        screen.blit(high_text, (WIDTH//2 - high_text.get_width()//2, quit_btn.bottom + 20))
-
+        
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit(); sys.exit()
@@ -539,23 +639,335 @@ def start_menu():
 
         pygame.display.flip()
 
+# --- Map Selection Screen ---
+def map_selection_screen():
+    global current_map
+    # Load maze background for map selection
+    bg = load_background("mazebg.png")
+    
+    # Create a semi-transparent overlay for better text readability
+    overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+    overlay.fill((0, 0, 0, 150))  # Semi-transparent black
+    
+    title = title_font.render("SELECT MAZE", True, LIGHT_BLUE)
+    
+    # Load map preview images
+    map_previews = {}
+    for map_num in range(1, 5):
+        map_previews[map_num] = load_map_preview(map_num)
+    
+    # Button dimensions - optimized for horizontal arrangement
+    button_w, button_h = 170, 220  # Same as before
+    
+    # Calculate positions for horizontal arrangement (1-2-3-4)
+    total_width = 4 * button_w + 3 * 30  # 4 buttons with 30px spacing
+    start_x = (WIDTH - total_width) // 2
+    y_position = 250  # Fixed vertical position
+    
+    buttons = {}
+    
+    for i in range(4):
+        map_num = i + 1
+        x_position = start_x + i * (button_w + 30)
+        buttons[map_num] = pygame.Rect(x_position, y_position, button_w, button_h)
+
+    while True:
+        # Draw background and overlay
+        screen.blit(bg, (0, 0))
+        screen.blit(overlay, (0, 0))
+        
+        mouse = pygame.mouse.get_pos()
+        
+        # Draw title with shadow effect
+        title_shadow = title_font.render("SELECT MAZE", True, (0, 0, 0))
+        screen.blit(title_shadow, (WIDTH//2 - title_shadow.get_width()//2 + 2, 82))
+        screen.blit(title, (WIDTH//2 - title.get_width()//2, 80))
+        
+        for map_num, rect in buttons.items():
+            # Check if map is unlocked
+            unlocked = map_unlocked[map_num]
+            completed = all(level_completion[map_num])  # Check if all levels are completed
+            
+            # Create a surface for the map button with transparency
+            button_surface = pygame.Surface((button_w, button_h), pygame.SRCALPHA)
+            
+            if not unlocked:
+                # Draw locked state
+                pygame.draw.rect(button_surface, (40, 40, 40, 200), (0, 0, button_w, button_h), border_radius=12)
+                pygame.draw.rect(button_surface, (80, 80, 80, 255), (0, 0, button_w, button_h), width=3, border_radius=12)
+                
+                # Darken the preview image
+                dark_preview = map_previews[map_num].copy()
+                dark_preview.fill((50, 50, 50, 180), special_flags=pygame.BLEND_RGBA_MULT)
+                button_surface.blit(dark_preview, (5, 5))
+                
+                # Large lock icon in center of preview
+                lock_font = pygame.font.SysFont("arial", 48, bold=True)
+                lock_icon = lock_font.render("🔒", True, WHITE)
+                button_surface.blit(lock_icon, (button_w//2 - lock_icon.get_width()//2, 70))
+                
+                # "LOCKED" text at bottom
+                status_text = font.render("LOCKED", True, RED)
+                button_surface.blit(status_text, (button_w//2 - status_text.get_width()//2, 180))
+            else:
+                # Draw normal state
+                if rect.collidepoint(mouse):
+                    # Hover effect - brighter background
+                    pygame.draw.rect(button_surface, (255, 255, 255, 50), (0, 0, button_w, button_h), border_radius=12)
+                    pygame.draw.rect(button_surface, LIGHT_BLUE, (0, 0, button_w, button_h), width=3, border_radius=12)
+                else:
+                    pygame.draw.rect(button_surface, (255, 255, 255, 30), (0, 0, button_w, button_h), border_radius=12)
+                    pygame.draw.rect(button_surface, MAPS[map_num]["color"], (0, 0, button_w, button_h), width=3, border_radius=12)
+                
+                # Draw the preview image
+                button_surface.blit(map_previews[map_num], (5, 5))
+                
+                # Show "COMPLETED" text if all levels are done
+                if completed:
+                    completed_font = pygame.font.SysFont("arial", 20, bold=True)
+                    completed_text = completed_font.render("COMPLETED", True, GREEN)
+                    button_surface.blit(completed_text, (button_w//2 - completed_text.get_width()//2, 180))
+            
+            # Draw the button surface to screen
+            screen.blit(button_surface, rect)
+            
+            # Theme name (drawn directly to screen for better visibility)
+            map_info = MAPS[map_num]
+            theme_font = pygame.font.SysFont("arial", 16, bold=True)
+            
+            # Display map number above the theme name
+            map_num_text = font.render(f"Map {map_num}", True, WHITE)
+            screen.blit(map_num_text, (rect.centerx - map_num_text.get_width()//2, rect.y - 30))
+            
+            # Wrap long theme names if needed
+            if len(map_info["theme"]) > 20:
+                # Split into two lines
+                words = map_info["theme"].split()
+                line1 = " ".join(words[:len(words)//2])
+                line2 = " ".join(words[len(words)//2:])
+                line1_text = theme_font.render(line1, True, WHITE)
+                line2_text = theme_font.render(line2, True, WHITE)
+                screen.blit(line1_text, (rect.centerx - line1_text.get_width()//2, rect.y + 170))
+                screen.blit(line2_text, (rect.centerx - line2_text.get_width()//2, rect.y + 190))
+            else:
+                theme_text = theme_font.render(map_info["theme"], True, WHITE)
+                screen.blit(theme_text, (rect.centerx - theme_text.get_width()//2, rect.y + 180))
+
+        # Back button
+        back_btn = pygame.Rect(WIDTH//2 - 100, HEIGHT - 70, 200, 50)
+        back_color = LIGHT_BLUE if back_btn.collidepoint(mouse) else BLUE
+        pygame.draw.rect(screen, back_color, back_btn, border_radius=12)
+        back_text = font.render("Back to Menu", True, WHITE)
+        screen.blit(back_text, (back_btn.centerx - back_text.get_width()//2, back_btn.centery - back_text.get_height()//2))
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit(); sys.exit()
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                for map_num, rect in buttons.items():
+                    # Check if map is unlocked and can be selected
+                    if rect.collidepoint(mouse) and map_unlocked[map_num]:
+                        current_map = map_num
+                        return
+                if back_btn.collidepoint(mouse):
+                    return "back"
+
+        pygame.display.flip()
+
+# --- Level Selection Screen ---
+def level_selection_screen(map_num):
+    # Load map-specific background
+    bg = load_map_background(map_num)
+    
+    # Create a semi-transparent overlay for better text readability
+    overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+    overlay.fill((0, 0, 0, 150))  # Semi-transparent black
+    
+    button_w, button_h = 100, 100
+    buttons = {}
+    
+    # Create 5 level buttons in a row
+    for i in range(5):
+        buttons[i+1] = pygame.Rect(150 + i*(button_w + 50), 300, button_w, button_h)
+
+    while True:
+        # Draw background and overlay
+        screen.blit(bg, (0, 0))
+        screen.blit(overlay, (0, 0))
+        
+        mouse = pygame.mouse.get_pos()
+        
+       
+        for level_num, rect in buttons.items():
+            # Check if level is unlocked
+            # Level 1 is always unlocked if map is unlocked
+            # Other levels are unlocked if previous level is completed
+            unlocked = (level_num == 1) or (level_num > 1 and level_completion[map_num][level_num-2])
+            completed = level_completion[map_num][level_num-1]
+            
+            # Create button surface with transparency
+            button_surface = pygame.Surface((button_w, button_h), pygame.SRCALPHA)
+            
+            if completed:
+                pygame.draw.rect(button_surface, (0, 200, 0, 200), (0, 0, button_w, button_h), border_radius=12)
+                pygame.draw.rect(button_surface, GREEN, (0, 0, button_w, button_h), width=3, border_radius=12)
+            elif unlocked:
+                if rect.collidepoint(mouse):
+                    pygame.draw.rect(button_surface, (100, 180, 255, 200), (0, 0, button_w, button_h), border_radius=12)
+                    pygame.draw.rect(button_surface, LIGHT_BLUE, (0, 0, button_w, button_h), width=3, border_radius=12)
+                else:
+                    pygame.draw.rect(button_surface, (0, 120, 255, 200), (0, 0, button_w, button_h), border_radius=12)
+                    pygame.draw.rect(button_surface, BLUE, (0, 0, button_w, button_h), width=3, border_radius=12)
+            else:
+                pygame.draw.rect(button_surface, (100, 100, 100, 200), (0, 0, button_w, button_h), border_radius=12)
+                pygame.draw.rect(button_surface, GRAY, (0, 0, button_w, button_h), width=3, border_radius=12)
+            
+            # Draw the button surface to screen
+            screen.blit(button_surface, rect)
+            
+            # Level number
+            level_text = title_font.render(str(level_num), True, WHITE)
+            screen.blit(level_text, (rect.centerx - level_text.get_width()//2, rect.centery - level_text.get_height()//2))
+            
+            # Status - show lock for locked levels, checkmark for completed
+            if completed:
+                status_text = font.render("✓", True, WHITE)
+                screen.blit(status_text, (rect.centerx - status_text.get_width()//2, rect.bottom + 10))
+            elif not unlocked:
+                # Show lock icon for locked levels
+                lock_font = pygame.font.SysFont("arial", 24)
+                lock_icon = lock_font.render("🔒", True, WHITE)
+                screen.blit(lock_icon, (rect.centerx - lock_icon.get_width()//2, rect.bottom + 10))
+
+        # Back button
+        back_btn = pygame.Rect(WIDTH//2 - 100, HEIGHT - 80, 200, 50)
+        back_color = LIGHT_BLUE if back_btn.collidepoint(mouse) else BLUE
+        pygame.draw.rect(screen, back_color, back_btn, border_radius=12)
+        back_text = font.render("Back to Maps", True, WHITE)
+        screen.blit(back_text, (back_btn.centerx - back_text.get_width()//2, back_btn.centery - back_text.get_height()//2))
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit(); sys.exit()
+            if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                for level_num, rect in buttons.items():
+                    # Check if level is unlocked and can be selected
+                    unlocked = (level_num == 1) or (level_num > 1 and level_completion[map_num][level_num-2])
+                    if rect.collidepoint(mouse) and unlocked:
+                        return level_num
+                if back_btn.collidepoint(mouse):
+                    return "back"
+
+        pygame.display.flip()
+
+# --- Run Screen (Play a single level) ---
+def run_screen(map_num, level_num):
+    global level_completion, map_unlocked
+    
+    # Calculate global level number
+    global_level = (map_num - 1) * 5 + level_num
+    
+    lives = 3
+    
+    # Quiz Section (if this level has a quiz)
+    if global_level in QUIZ_LEVELS:
+        while True:
+            lives, passed = quiz_screen(global_level, lives)
+            if lives <= 0:
+                game_over()
+                return False
+            if passed:
+                break
+
+    # Maze Gameplay Section
+    next_level, lives = play_level(global_level, lives, map_num)
+    
+    if next_level:
+        # Mark this level as completed
+        level_completion[map_num][level_num-1] = True
+        
+        # If this was the last level of the map, unlock the next map
+        if level_num == 5 and map_num < 4:
+            map_unlocked[map_num + 1] = True
+        
+        save_progress()
+        return True
+    else:
+        return False
+
+# --- Map Complete Screen ---
+def map_complete_screen(map_num):
+    screen.fill(BLACK)
+    title_font = pygame.font.Font(None, 80)
+    sub_font = pygame.font.Font(None, 40)
+    
+    map_info = MAPS[map_num]
+    title_text = title_font.render(f"{map_info['theme']} COMPLETED!", True, MAPS[map_num]["color"])
+    
+    if map_num < 4:
+        next_map_info = MAPS[map_num + 1]
+        sub_text = sub_font.render(f"Next map unlocked: {next_map_info['theme']}", True, (200, 200, 200))
+    else:
+        sub_text = sub_font.render("All maps completed! You are a maze master!", True, (200, 200, 200))
+    
+    for alpha in range(0, 255, 5):
+        screen.fill(BLACK)
+        title_surface = title_text.copy()
+        sub_surface = sub_text.copy()
+        title_surface.set_alpha(alpha)
+        sub_surface.set_alpha(alpha)
+        
+        screen.blit(title_surface, (WIDTH//2 - title_surface.get_width()//2, HEIGHT//2 - 60))
+        screen.blit(sub_surface, (WIDTH//2 - sub_surface.get_width()//2, HEIGHT//2 + 20))
+        
+        pygame.display.flip()
+        pygame.time.delay(20)
+    
+    pygame.time.delay(2000)
+
+# --- All Levels Completed Screen ---
+def all_levels_completed_screen():
+    screen.fill((0, 0, 0))
+    font_large = pygame.font.Font(None, 80)
+    sub_font = pygame.font.Font(None, 40)
+
+    text = font_large.render("🎉 All Maps Completed!", True, (255, 215, 0))
+    sub_text = sub_font.render("You mastered MASID: Maze!", True, (255, 255, 255))
+
+    screen.blit(text, (WIDTH // 2 - text.get_width() // 2, HEIGHT // 2 - 60))
+    screen.blit(sub_text, (WIDTH // 2 - sub_text.get_width() // 2, HEIGHT // 2 + 20))
+    pygame.display.flip()
+
+    try:
+        pygame.mixer.Sound("assets/victory.wav").play()
+    except:
+        pass
+
+    pygame.time.wait(5000)
+
+# --- NPC Intro ---
 def npc_intro_all_tips():
     clock = pygame.time.Clock()
-    npc_img = load_sprite("npc.png", 150)  # NPC size
+    try:
+        npc_img = load_sprite("npc.png", 150)
+    except:
+        npc_img = pygame.Surface((150, 150))
+        npc_img.fill(LIGHT_BLUE)
+    
     tips = [
         "Hi there, adventurer!",
         "Welcome to MASID: Maze Adventure!",
+        "Complete levels in order to unlock the next ones.",
+        "Each map has 5 levels that must be completed sequentially.",
         "Collect all items to proceed to the next level.",
-        "Collecting items gives you hints for quizzes.",
         "Avoid enemies — they cost lives.",
-        "Some levels are timed — hurry!",
-        "Use arrow keys to move.",
-        "Answer quizzes correctly to keep lives.",
-        "Press ESC to pause the game anytime.",
-        "Goodluck and have fun exploring the maze!",
+        "Higher levels have more enemies and items to collect!",
+        "Some levels have timed challenges.",
+        "Answer quizzes to test your knowledge.",
+        "Complete a map to unlock the next one!",
+        "Good luck and have fun exploring!",
     ]
 
-    # Dialogue bubble settings
     bubble_width, bubble_height = 500, 100
     bubble_x, bubble_y = 200, HEIGHT//2 - bubble_height//2
     font_small = pygame.font.SysFont("arial", 24)
@@ -563,83 +975,74 @@ def npc_intro_all_tips():
     current_tip = 0
     total_tips = len(tips)
 
-    # Optional background image for the dialogue screen
     try:
-        bg = pygame.image.load("assets/backk.png").convert()
-        bg = pygame.transform.scale(bg, (WIDTH, HEIGHT))
+        bg = load_background("backk.png")
     except:
-        bg = None  # fallback to DARK background if image not found
+        bg = None
 
     while current_tip < total_tips:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit(); sys.exit()
             if event.type == pygame.KEYDOWN or event.type == pygame.MOUSEBUTTONDOWN:
-                # Move to next tip when player presses any key or clicks
                 current_tip += 1
 
-        # Draw background
         if bg:
             screen.blit(bg, (0, 0))
         else:
             screen.fill(DARK)
 
-        # Draw NPC character
         screen.blit(npc_img, (50, HEIGHT//2 - npc_img.get_height()//2))
 
         if current_tip < total_tips:
-            # Draw bubble
             pygame.draw.rect(screen, (255, 255, 255), (bubble_x, bubble_y, bubble_width, bubble_height), border_radius=16)
             pygame.draw.rect(screen, LIGHT_BLUE, (bubble_x, bubble_y, bubble_width, bubble_height), 3, border_radius=16)
 
-            # Draw “tail” pointing to NPC
             tail_points = [(bubble_x - 10, bubble_y + 20), (bubble_x, bubble_y + 40), (bubble_x, bubble_y + 20)]
             pygame.draw.polygon(screen, (255, 255, 255), tail_points)
             pygame.draw.polygon(screen, LIGHT_BLUE, tail_points, 2)
 
-            # Draw tip text
             tip_text = font_small.render(tips[current_tip], True, BLACK)
             screen.blit(tip_text, (bubble_x + 20, bubble_y + bubble_height//2 - tip_text.get_height()//2))
 
         pygame.display.flip()
         clock.tick(30)
 
-
+# --- Main Game Flow ---
 def main():
-    pygame.mixer.music.load("assets/background music.wav")
-    pygame.mixer.music.play(-1)
-    pygame.mixer.music.set_volume(0.5)
+    try:
+        pygame.mixer.music.load("assets/background music.wav")
+        pygame.mixer.music.play(-1)
+        pygame.mixer.music.set_volume(0.5)
+    except:
+        pass
+    
+    # Load progress at start
+    load_progress()
 
-    start_menu()
-
-    # Show all tips at the start
-    npc_intro_all_tips()
-
-    level, lives = 1, 3
     while True:
-        # quiz & level logic remains the same
-        if level in QUIZ_LEVELS:
+        start_screen()
+        npc_intro_all_tips()
+        
+        # Map selection loop
+        while True:
+            result = map_selection_screen()
+            if result == "back":
+                break
+            
+            # Level selection loop for the selected map
             while True:
-                lives, passed = quiz_screen(level, lives)
-                if lives <= 0:
-                    game_over()
-                    start_menu()
-                    level, lives = 1, 3
+                selected_level = level_selection_screen(current_map)
+                if selected_level == "back":
                     break
-                if passed:
+                
+                # Play the selected level
+                success = run_screen(current_map, selected_level)
+                
+                # If player completed the level and it was the last level of the map
+                if success and selected_level == 5:
+                    map_complete_screen(current_map)
                     break
-            if lives <= 0:
-                continue
-
-        # Start level
-        next_level, lives = play_level(level, lives)
-        if next_level:
-            level += 1
-        else:
-            start_menu()
-            level, lives = 1, 3
-
-
 
 if __name__ == "__main__":
     main()
