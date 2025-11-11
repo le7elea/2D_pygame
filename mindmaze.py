@@ -1062,6 +1062,9 @@ def play_level(map_num, level_num, lives):
     player_last_update = pygame.time.get_ticks()
     animation_speed = 150
     current_player_img = player_walk_frames[0]
+    
+    # Add direction tracking
+    last_horizontal_direction = "right"  # Default facing right
 
     coin_img = load_sprite("coinss.png", tile_size)
     exit_img = load_sprite("gameDoor1.png", tile_size)
@@ -1330,9 +1333,11 @@ def play_level(map_num, level_num, lives):
             elif keys[pygame.K_LEFT]:
                 new_pos[0] -= 1
                 moved = True
+                last_horizontal_direction = "left"  # Set direction to left
             elif keys[pygame.K_RIGHT]:
                 new_pos[0] += 1
                 moved = True
+                last_horizontal_direction = "right"  # Set direction to right
 
             # Allow player to pass through exit door without completing items
             # The exit door is now just a visual element, not a blocking tile
@@ -1369,22 +1374,23 @@ def play_level(map_num, level_num, lives):
                 if shoot_sound:
                     shoot_sound.play()
 
-            # --- Animate Player ---
+            # --- Animate Player with Rotation ---
             moving = any([keys[pygame.K_UP], keys[pygame.K_DOWN], keys[pygame.K_LEFT], keys[pygame.K_RIGHT]])
             if moving:
                 now = pygame.time.get_ticks()
                 if now - player_last_update > animation_speed:
                     player_frame_index = (player_frame_index + 1) % len(player_walk_frames)
                     player_last_update = now
-            current_player_img = player_walk_frames[player_frame_index] if moving else player_walk_frames[0]
-            
-            # Flip sprite based on last horizontal movement
-            if moved:
-                if new_pos[0] < player_pos[0]:  # Moving left
-                    current_player_img = pygame.transform.flip(current_player_img, True, False)
-                elif new_pos[0] > player_pos[0]:  # Moving right
-                    current_player_img = player_walk_frames[player_frame_index] if moving else player_walk_frames[0]
-            
+
+            # Get the base frame
+            base_frame = player_walk_frames[player_frame_index] if moving else player_walk_frames[0]
+
+            # Apply rotation based on last horizontal direction
+            if last_horizontal_direction == "left":
+                current_player_img = pygame.transform.flip(base_frame, True, False)
+            else:
+                current_player_img = base_frame
+
             screen.blit(current_player_img, (player_pos[0]*tile_size, player_pos[1]*tile_size + HUD_HEIGHT))
 
             # --- Coins ---
@@ -1734,4 +1740,4 @@ def main():
                     break
 
 if __name__ == "__main__":
-    main() 
+    main()
